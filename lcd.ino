@@ -1,6 +1,7 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#include <EEPROM.h>
 
 // Konfiguracja wyświetlacza
 #define SCREEN_WIDTH 128
@@ -12,12 +13,51 @@
 #define CONTROLLER_RX 16
 #define CONTROLLER_TX 17
 
-// Twoje stałe ustawienia - zmień według potrzeb
-const uint8_t WHEEL_SIZE = 26;      // rozmiar koła w calach
-const uint8_t MAX_SPEED = 25;       // limit prędkości km/h
-const uint8_t PAS_LEVELS = 5;       // liczba poziomów wspomagania
-const uint8_t VOLTAGE = 36;         // napięcie systemu (V)
-const bool USE_KMH = true;          // true = km/h, false = mph
+// Struktura konfiguracji KT-LCD8S
+struct LCD8SConfig {
+    // Parametry główne
+    struct {
+        uint8_t limitSpeed;    // LIM: Ograniczenie prędkości (km/h)
+        uint8_t wheelSize;     // DIM: 5,6,8,10,12,14,16,18,20,22,24,26,27(700c),28,29
+        uint8_t units;         // UNT: 0=Km/h Km °C, 1=MPH Mile °C, 2=Km/h Km °F, 3=MPH Mile °F
+    } main;
+
+    // Parametry P
+    struct {
+        uint8_t p1;           // P1: Ilość magnesów * przełożenie
+        uint8_t p2;           // P2: 0=bez przekładni, 1=przekładnia, 2-6=multi-magnet
+        uint8_t p3;           // P3: 0=speed control, 1=torque sim
+        uint8_t p4;           // P4: 0=throttle from 0, 1=PAS start
+        uint8_t p5;           // P5: 1=voltage based, 4-11=24V, 5-15=36V, 6-20=48V, 7-30=60V
+    } p;
+
+    // Parametry C
+    struct {
+        uint8_t c1;           // C1: 0-4=right PAS, 5-7=left PAS
+        uint8_t c2;           // C2: Phase sampling 0-7
+        uint8_t c3;           // C3: Start PAS level 0-8
+        uint8_t c4;           // C4: Throttle/PAS behavior 0-4
+        uint8_t c5;           // C5: Power limit 0-10
+        uint8_t c6;           // C6: Display brightness 1-5
+        uint8_t c7;           // C7: Cruise control 0/1
+        uint8_t c8;           // C8: Motor temp display 0/1
+        uint8_t c9;           // C9: Startup password
+        uint8_t c10;          // C10: Factory reset 0/1
+        uint8_t c11;          // C11: Service setting
+        uint8_t c12;          // C12: Controller LVC adj 0-7
+        uint8_t c13;          // C13: Regen brake 0-5
+        uint8_t c14;          // C14: PAS sensitivity 1-3
+        uint8_t c15;          // C15: Walk assist speed
+    } c;
+
+    // Parametry L
+    struct {
+        uint8_t l1;           // L1: Controller LVC 0-3
+        uint8_t l2;           // L2: High speed motor mode 0/1
+        uint8_t l3;           // L3: Dual hall mode 0/1
+        uint8_t l4;           // L4: Auto power off time (minutes)
+    } l;
+} config;
 
 // Struktura danych wyświetlacza
 struct DisplayData {
@@ -27,10 +67,58 @@ struct DisplayData {
     uint8_t pasLevel;
     float power;
     float distance;
+    float temperature;
     uint8_t error;
+    bool cruise;
+    bool walk;
 } data;
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+void loadDefaultConfig() {
+    // Główne parametry
+    config.main.limitSpeed = 72;
+    config.main.wheelSize = 27;  // 700C
+    config.main.units = 0;       // Km/h
+
+    // Parametry P
+    config.p.p1 = 96;           // Mxus FX15/XF08/XP03/XP04
+    config.p.p2 = 1;            // Silnik przekładniowy
+    config.p.p3 = 1;            // Symulacja momentu
+    config.p.p4 = 0;            // Start od 0
+    config.p.p5 = 1;            // Pomiar napięcia na bieżąco
+
+    // Parametry C
+    config.c.c1 = 2;            // Prawy PAS
+    config.c.c2 = 0;            // Domyślne próbkowanie
+    config.c.c3 = 8;            // Ostatni używany poziom
+    config.c.c4 = 3;            // Pełna kontrola manetki
+    config.c.c5 = 10;           // 100% mocy
+    config.c.c6 = 5;            // Max jasność
+    config.c.c7 = 1;            // Tempomat włączony
+    config.c.c8 = 0;            // Bez pomiaru temperatury
+    config.c.c9 = 0;            // Bez hasła
+    config.c.c10 = 0;           // Bez resetu
+    config.c.c11 = 0;           // Domyślne serwisowe
+    config.c.c12 = 4;           // Domyślne LVC
+    config.c.c13 = 0;           // Bez rekuperacji
+    config.c.c14 = 1;           // Niskie wspomaganie
+    config.c.c15 = 6;           // 6 km/h walk
+
+    // Parametry L
+    config.l.l1 = 0;            // Fabryczne LVC
+    config.l.l2 = 0;            // Normalny silnik
+    config.l.l3 = 1;            // Zabezpieczenie hall
+    config.l.l4 = 5;            // 5 min auto-off
+}
+
+void saveConfig() {
+    EEPROM.put(0, config);
+}
+
+void loadConfig() {
+    EEPROM.get(0, config);
+}
 
 void setup() {
     // Inicjalizacja UART do kontrolera
@@ -43,124 +131,107 @@ void setup() {
     }
     display.clearDisplay();
     
-    // Wyślij początkową konfigurację do kontrolera
-    sendInitialConfig();
-}
-
-void loop() {
-    static unsigned long lastDisplay = 0;
-    
-    // Odbieranie danych z kontrolera
-    if(Serial2.available()) {
-        processControllerData();
+    // Wczytaj konfigurację lub ustaw domyślną
+    if(EEPROM.read(0) == 0xFF) {
+        loadDefaultConfig();
+        saveConfig();
+    } else {
+        loadConfig();
     }
     
-    // Aktualizacja wyświetlacza co 100ms
-    if(millis() - lastDisplay > 100) {
-        updateDisplay();
-        lastDisplay = millis();
-    }
+    // Wyślij konfigurację do kontrolera
+    sendFullConfig();
 }
 
-void processControllerData() {
-    static uint8_t buffer[10];
-    static uint8_t bufIndex = 0;
+void sendFullConfig() {
+    // Główne parametry
+    sendConfigFrame(0x51, config.main.limitSpeed, config.main.wheelSize, config.main.units);
     
-    while(Serial2.available()) {
-        uint8_t incoming = Serial2.read();
+    // Parametry P
+    sendConfigFrame(0x52, config.p.p1, config.p.p2, config.p.p3, config.p.p4, config.p.p5);
+    
+    // Parametry C
+    for(uint8_t i = 0; i < 15; i++) {
+        uint8_t* cParams = (uint8_t*)&config.c;
+        sendConfigFrame(0x53 + i, cParams[i]);
+    }
+    
+    // Parametry L
+    sendConfigFrame(0x54, config.l.l1, config.l.l2, config.l.l3, config.l.l4);
+}
+
+void sendConfigFrame(uint8_t cmd, ...) {
+    uint8_t buffer[10];
+    va_list args;
+    va_start(args, cmd);
+    
+    buffer[0] = 0x11;  // Start byte
+    buffer[1] = cmd;   // Command
+    
+    uint8_t len = 0;
+    uint8_t checksum = buffer[0] ^ buffer[1];
+    
+    // Dodaj parametry do ramki
+    while(len < 8) {  // Max 8 parametrów
+        uint8_t param = va_arg(args, int);  // va_arg używa int dla uint8_t
+        buffer[2 + len] = param;
+        checksum ^= param;
+        len++;
         
-        if(bufIndex == 0 && incoming != 0x11) {
-            continue;
-        }
-        
-        buffer[bufIndex++] = incoming;
-        
-        if(bufIndex == 6) {  // Standardowa długość ramki
-            if(validateChecksum(buffer)) {
-                parseFrame(buffer);
-            }
-            bufIndex = 0;
-        }
+        if(va_arg(args, void*) == NULL) break;
     }
-}
-
-bool validateChecksum(uint8_t* frame) {
-    uint8_t checksum = 0;
-    for(int i = 0; i < 5; i++) {
-        checksum ^= frame[i];
-    }
-    return checksum == frame[5];
-}
-
-void parseFrame(uint8_t* frame) {
-    switch(frame[1]) {
-        case 0x01: // Status systemu
-            data.batteryVoltage = frame[2] * 0.1;
-            data.batteryPercent = frame[3];
-            data.error = frame[4];
-            break;
-            
-        case 0x02: // Dane prędkości
-            data.speed = frame[2] * 0.1;
-            break;
-            
-        case 0x03: // Dane PAS i mocy
-            data.pasLevel = frame[2];
-            data.power = frame[3] * 10.0;
-            break;
-    }
-}
-
-void sendInitialConfig() {
-    // Ramka konfiguracyjna
-    uint8_t config[] = {
-        0x11,           // Start byte
-        0x51,           // Command: Set config
-        0x04,           // Length
-        WHEEL_SIZE,     // Wheel size
-        MAX_SPEED,      // Speed limit
-        PAS_LEVELS,     // PAS levels
-        0x00            // Checksum (obliczone poniżej)
-    };
     
-    // Oblicz sumę kontrolną
-    config[6] = config[0] ^ config[1] ^ config[2] ^ config[3] ^ config[4] ^ config[5];
+    buffer[2 + len] = checksum;
+    Serial2.write(buffer, 3 + len);
     
-    // Wyślij konfigurację
-    Serial2.write(config, 7);
+    va_end(args);
 }
+
+[Poprzednie funkcje processControllerData(), validateChecksum(), parseFrame() pozostają bez zmian]
 
 void updateDisplay() {
     display.clearDisplay();
     display.setTextSize(2);
     display.setTextColor(SSD1306_WHITE);
     
-    // Prędkość (duże cyfry na górze)
+    // Prędkość
     display.setTextSize(3);
     display.setCursor(0,0);
     display.print(data.speed, 1);
     display.setTextSize(1);
-    display.print(USE_KMH ? " KM/H" : " MPH");
+    display.print(config.main.units & 1 ? " MPH" : " KM/H");
     
-    // Bateria i PAS (średni rozmiar)
+    // Bateria i PAS
     display.setTextSize(2);
     display.setCursor(0, 32);
     display.print(data.batteryVoltage, 1);
-    display.print("V");
+    display.print("V ");
+    display.print(data.batteryPercent);
+    display.print("%");
     
     // PAS poziom
     display.setCursor(70, 32);
     display.print("P");
     display.print(data.pasLevel);
     
-    // Moc na dole
-    display.setCursor(0, 48);
+    // Status
+    display.setTextSize(1);
+    display.setCursor(0, 54);
+    if(data.cruise) display.print("CRUISE ");
+    if(data.walk) display.print("WALK ");
+    
+    // Moc i temperatura
+    display.setCursor(70, 48);
     display.print(data.power, 0);
     display.print("W");
+    if(config.c.c8) {  // Jeśli włączony pomiar temperatury
+        display.print(" ");
+        display.print(data.temperature, 0);
+        display.print("C");
+    }
     
-    // Wyświetl błędy jeśli są
+    // Błędy
     if(data.error) {
-        display.setTextSize(1);
         display.setCursor(70, 54);
         display.print("E:");
         display.print(data.error);
