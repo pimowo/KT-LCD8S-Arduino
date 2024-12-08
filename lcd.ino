@@ -65,3 +65,182 @@ struct LCD8SConfig {
         uint8_t l4;           // L4: Auto power off time (minutes)
     } l;
 } config;
+
+// Struktura danych wyświetlacza
+struct DisplayData {
+    float speed;
+    float batteryVoltage;
+    uint8_t batteryPercent;
+    uint8_t pasLevel;
+    float power;
+    float distance;
+    float temperature;
+    uint8_t error;
+    bool cruise;
+    bool walk;
+} data;
+
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+void loadDefaultConfig() {
+    // Główne parametry
+    config.main.limitSpeed = 72;
+    config.main.wheelSize = 27;  // 700C
+    config.main.units = 0;       // Km/h
+
+    // Parametry P
+    config.p.p1 = 96;           // Mxus FX15/XF08/XP03/XP04
+    config.p.p2 = 1;            // Silnik przekładniowy
+    config.p.p3 = 1;            // Symulacja momentu
+    config.p.p4 = 0;            // Start od 0
+    config.p.p5 = 1;            // Pomiar napięcia na bieżąco
+
+    // Parametry C
+    config.c.c1 = 2;            // Prawy PAS
+    config.c.c2 = 0;            // Domyślne próbkowanie
+    config.c.c3 = 8;            // Ostatni używany poziom
+    config.c.c4 = 3;            // Pełna kontrola manetki
+    config.c.c5 = 10;           // 100% mocy
+    config.c.c6 = 5;            // Max jasność
+    config.c.c7 = 1;            // Tempomat włączony
+    config.c.c8 = 0;            // Bez pomiaru temperatury
+    config.c.c9 = 0;            // Bez hasła
+    config.c.c10 = 0;           // Bez resetu
+    config.c.c11 = 0;           // Domyślne serwisowe
+    config.c.c12 = 4;           // Domyślne LVC
+    config.c.c13 = 0;           // Bez rekuperacji
+    config.c.c14 = 1;           // Niskie wspomaganie
+    config.c.c15 = 6;           // 6 km/h walk
+
+    // Parametry L
+    config.l.l1 = 0;            // Fabryczne LVC
+    config.l.l2 = 0;            // Normalny silnik
+    config.l.l3 = 1;            // Zabezpieczenie hall
+    config.l.l4 = 5;            // 5 min auto-off
+}
+
+void saveConfig() {
+    EEPROM.put(0, config);
+}
+
+void loadConfig() {
+    EEPROM.get(0, config);
+}
+
+void setup() {
+    // Inicjalizacja UART do kontrolera
+    Serial2.begin(1200, SERIAL_8N1, CONTROLLER_RX, CONTROLLER_TX);
+    
+    // Inicjalizacja OLED
+    if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
+        Serial.println(F("SSD1306 allocation failed"));
+        for(;;);
+    }
+    display.clearDisplay();
+    
+    // Wczytaj konfigurację lub ustaw domyślną
+    if(EEPROM.read(0) == 0xFF) {
+        loadDefaultConfig();
+        saveConfig();
+    } else {
+        loadConfig();
+    }
+    
+    // Wyślij konfigurację do kontrolera
+    sendFullConfig();
+}
+
+void sendFullConfig() {
+    // Główne parametry
+    sendConfigFrame(0x51, config.main.limitSpeed, config.main.wheelSize, config.main.units);
+    
+    // Parametry P
+    sendConfigFrame(0x52, config.p.p1, config.p.p2, config.p.p3, config.p.p4, config.p.p5);
+    
+    // Parametry C
+    for(uint8_t i = 0; i < 15; i++) {
+        uint8_t* cParams = (uint8_t*)&config.c;
+        sendConfigFrame(0x53 + i, cParams[i]);
+    }
+    
+    // Parametry L
+    sendConfigFrame(0x54, config.l.l1, config.l.l2, config.l.l3, config.l.l4);
+}
+
+void sendConfigFrame(uint8_t cmd, ...) {
+    uint8_t buffer[10];
+    va_list args;
+    va_start(args, cmd);
+    
+    buffer[0] = 0x11;  // Start byte
+    buffer[1] = cmd;   // Command
+    
+    uint8_t len = 0;
+    uint8_t checksum = buffer[0] ^ buffer[1];
+    
+    // Dodaj parametry do ramki
+    while(len < 8) {  // Max 8 parametrów
+        uint8_t param = va_arg(args, int);  // va_arg używa int dla uint8_t
+        buffer[2 + len] = param;
+        checksum ^= param;
+        len++;
+        
+        if(va_arg(args, void*) == NULL) break;
+    }
+    
+    buffer[2 + len] = checksum;
+    Serial2.write(buffer, 3 + len);
+    
+    va_end(args);
+}
+
+void updateDisplay() {
+    display.clearDisplay();
+    display.setTextSize(2);
+    display.setTextColor(SSD1306_WHITE);
+    
+    // Prędkość
+    display.setTextSize(3);
+    display.setCursor(0,0);
+    display.print(data.speed, 1);
+    display.setTextSize(1);
+    display.print(config.main.units & 1 ? " MPH" : " KM/H");
+    
+    // Bateria i PAS
+    display.setTextSize(2);
+    display.setCursor(0, 32);
+    display.print(data.batteryVoltage, 1);
+    display.print("V ");
+    display.print(data.batteryPercent);
+    display.print("%");
+    
+    // PAS poziom
+    display.setCursor(70, 32);
+    display.print("P");
+    display.print(data.pasLevel);
+    
+    // Status
+    display.setTextSize(1);
+    display.setCursor(0, 54);
+    if(data.cruise) display.print("CRUISE ");
+    if(data.walk) display.print("WALK ");
+    
+    // Moc i temperatura
+    display.setCursor(70, 48);
+    display.print(data.power, 0);
+    display.print("W");
+    if(config.c.c8) {  // Jeśli włączony pomiar temperatury
+        display.print(" ");
+        display.print(data.temperature, 0);
+        display.print("C");
+    }
+    
+    // Błędy
+    if(data.error) {
+        display.setCursor(70, 54);
+        display.print("E:");
+        display.print(data.error);
+    }
+    
+    display.display();
+}
