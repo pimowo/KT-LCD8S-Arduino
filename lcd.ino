@@ -5,7 +5,7 @@
 
 // Inicjalizacja obiektów
 Preferences preferences;
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+//Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 // Tryb debug
 #define DEBUG
