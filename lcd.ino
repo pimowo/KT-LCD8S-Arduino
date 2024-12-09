@@ -244,3 +244,18 @@ void updateDisplay() {
     
     display.display();
 }
+
+void loop() {
+    static unsigned long lastDisplay = 0;
+
+    // Odbieranie danych z kontrolera
+    if (Serial2.available()) {
+        processControllerData();
+    }
+
+    // Aktualizacja wyświetlacza co 100ms
+    if (millis() - lastDisplay > 100) {
+        updateDisplay();
+        lastDisplay = millis();
+    }
+}
