@@ -3,8 +3,26 @@
 #include <Adafruit_SSD1306.h>
 #include <Preferences.h>
 
+// Inicjalizacja obiektów
+Preferences preferences;
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
 // Tryb debug
 #define DEBUG
+
+// Tryb debug
+#ifdef DEBUG
+  void debugPrint(const char* msg);
+  void debugFrame(uint8_t* frame, uint8_t length);
+  void debugData();
+#else
+  #define debugPrint(msg)
+  #define debugFrame(frame, length)
+  #define debugData()
+#endif
+
+// Deklaracja funkcji updateDisplay
+void updateDisplay();
 
 // Konfiguracja wyświetlacza
 #define SCREEN_WIDTH 128
@@ -17,13 +35,6 @@
 #define CONTROLLER_TX 43  // Pin TX2
 #define I2C_SDA 8        // Pin SDA
 #define I2C_SCL 9        // Pin SCL
-
-// Podstawowe makra debugowania
-#ifdef DEBUG
-  #define debugPrint(msg) Serial.println(msg)
-#else
-  #define debugPrint(msg)
-#endif
 
 // Parametry protokołu
 #define FRAME_MAX_LENGTH 12
@@ -134,10 +145,6 @@ void debugData() {
     Serial.print("W Temp: "); Serial.print(data.temperature);
     Serial.println("°C");
 }
-#else
-#define debugPrint(msg)
-#define debugFrame(frame, length)
-#define debugData()
 #endif
 
 // Funkcje konfiguracji
@@ -343,6 +350,37 @@ void processControllerData() {
     }
 }
 
+void updateDisplay() {
+    display.clearDisplay();
+    
+    // Wyświetl prędkość
+    display.setTextSize(2);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(0,0);
+    display.print(data.speed, 1);
+    display.print(" km/h");
+    
+    // Wyświetl napięcie baterii
+    display.setTextSize(1);
+    display.setCursor(0, 20);
+    display.print(data.batteryVoltage, 1);
+    display.print("V ");
+    display.print(data.batteryPercent);
+    display.print("%");
+    
+    // Wyświetl poziom PAS
+    display.setCursor(0, 30);
+    display.print("PAS: ");
+    display.print(data.pasLevel);
+    
+    // Wyświetl moc
+    display.setCursor(0, 40);
+    display.print(data.power);
+    display.print("W");
+    
+    display.display();
+}
+
 void setup() {
     #ifdef DEBUG
     Serial.begin(115200);  // Port debug
@@ -364,14 +402,8 @@ void setup() {
     display.clearDisplay();
     debugPrint("Display initialized");
     
-    // Wczytaj konfigurację lub ustaw domyślną
-    if(EEPROM.read(0) == 0xFF) {
-        debugPrint("No config found in EEPROM");
-        loadDefaultConfig();
-        saveConfig();
-    } else {
-        loadConfig();
-    }
+    // Wczytaj konfigurację
+    loadConfig();
     
     // Wyślij konfigurację do kontrolera
     sendFullConfig();
