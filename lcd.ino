@@ -16,8 +16,8 @@
 #define I2C_SCL 9        // Pin SCL
 
 // Definicje pinów dla przycisków
-#define BTN_1 4  // Przycisk 1 (PAS+, tempomat, ustawienia)
-#define BTN_2 5  // Przycisk 2 (PAS-, walk, power)
+#define BTN_1 15  // Przycisk 1 (PAS+, tempomat, ustawienia)
+#define BTN_2 16  // Przycisk 2 (PAS-, walk, power)
 
 // Stałe czasowe
 #define LONG_PRESS_TIME 1000     // 1 sekunda dla długiego przyciśnięcia
@@ -34,6 +34,14 @@
 #define CMD_SPEED 0x02
 #define CMD_PAS 0x03
 #define CMD_CONFIG 0x51
+
+// Definicje ekranów
+#define SCREEN_MAIN 0
+#define SCREEN_DETAILS 1
+#define SCREEN_SETTINGS 2
+#define MAX_SCREENS 3
+
+uint8_t currentScreen = SCREEN_MAIN;
 
 // Inicjalizacja obiektów
 Preferences preferences;
@@ -556,6 +564,119 @@ void updateDisplay() {
     display.print("W");
     
     display.display();
+}
+
+void updateDisplay() {
+    display.clearDisplay();
+    display.setTextColor(SSD1306_WHITE);
+
+    switch (currentScreen) {
+        case SCREEN_MAIN:
+            drawMainScreen();
+            break;
+        case SCREEN_DETAILS:
+            drawDetailsScreen();
+            break;
+        case SCREEN_SETTINGS:
+            drawSettingsScreen();
+            break;
+    }
+
+    display.display();
+}
+
+void drawMainScreen() {
+    // Duża prędkość na środku
+    display.setTextSize(3);
+    display.setCursor(20, 10);
+    display.print((int)data.speed);
+    display.setTextSize(2);
+    display.print("km");
+    
+    // PAS level i bateria na dole
+    display.setTextSize(1);
+    
+    // PAS po lewej
+    display.setCursor(0, 56);
+    display.print("PAS:");
+    display.print(data.pasLevel);
+    
+    // Bateria po prawej
+    display.setCursor(64, 56);
+    display.print(data.batteryPercent);
+    display.print("%");
+    
+    // Ikony statusu (cruise/walk)
+    if (data.cruise) {
+        display.setCursor(0, 0);
+        display.print("C");
+    }
+    if (data.walk) {
+        display.setCursor(10, 0);
+        display.print("W");
+    }
+}
+
+void drawDetailsScreen() {
+    display.setTextSize(1);
+    
+    // Voltage
+    display.setCursor(0, 0);
+    display.print("Bat: ");
+    display.print(data.batteryVoltage, 1);
+    display.print("V");
+    
+    // Power
+    display.setCursor(0, 16);
+    display.print("Power: ");
+    display.print(data.power, 0);
+    display.print("W");
+    
+    // Temperature
+    display.setCursor(0, 32);
+    display.print("Temp: ");
+    display.print(data.temperature, 1);
+    display.print("C");
+    
+    // Distance
+    display.setCursor(0, 48);
+    display.print("Dist: ");
+    display.print(data.distance, 1);
+    display.print("km");
+}
+
+void drawSettingsScreen() {
+    display.setTextSize(1);
+    
+    // Wheel size
+    display.setCursor(0, 0);
+    display.print("Wheel: ");
+    display.print(config.main.wheelSize);
+    
+    // Speed limit
+    display.setCursor(0, 16);
+    display.print("Limit: ");
+    display.print(config.main.limitSpeed);
+    
+    // Motor config
+    display.setCursor(0, 32);
+    display.print("Motor: P");
+    display.print(config.p.p1);
+    
+    // Controller config
+    display.setCursor(0, 48);
+    display.print("Ctrl: C");
+    display.print(config.c.c1);
+}
+
+void screenNext() {
+    currentScreen = (currentScreen + 1) % MAX_SCREENS;
+    updateDisplay();
+}
+
+void screenPrevious() {
+    currentScreen = (currentScreen + MAX_SCREENS - 1) % MAX_SCREENS;
+    updateDisplay();
 }
 
 void setup() {
