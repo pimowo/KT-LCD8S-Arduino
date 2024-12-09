@@ -15,6 +15,14 @@
 #define I2C_SDA 8        // Pin SDA
 #define I2C_SCL 9        // Pin SCL
 
+// Definicje pinów dla przycisków
+#define BTN_1 4  // Przycisk 1 (PAS+, tempomat, ustawienia)
+#define BTN_2 5  // Przycisk 2 (PAS-, walk, power)
+
+// Stałe czasowe
+#define LONG_PRESS_TIME 1000     // 1 sekunda dla długiego przyciśnięcia
+#define DOUBLE_CLICK_TIME 300    // 300ms na podwójne kliknięcie
+
 // Parametry protokołu
 #define FRAME_MAX_LENGTH 12
 #define FRAME_MIN_LENGTH 4   // start + cmd + len + checksum
@@ -113,6 +121,181 @@ struct DisplayData {
     bool walk;
     unsigned long lastUpdate;  // Timestamp ostatniej aktualizacji
 } data;
+
+// Definicje pinów dla przycisków
+#define BTN_1 15  // Przycisk 1 (PAS+, tempomat, ustawienia)
+#define BTN_2 16  // Przycisk 2 (PAS-, walk, power)
+
+// Stałe czasowe
+#define LONG_PRESS_TIME 1000     // 1 sekunda dla długiego przyciśnięcia
+#define DOUBLE_CLICK_TIME 300    // 300ms na podwójne kliknięcie
+
+// Stan przycisków
+struct ButtonState {
+    bool current;                // Aktualny stan
+    bool last;                   // Poprzedni stan
+    unsigned long pressTime;     // Czas wciśnięcia
+    unsigned long lastReleaseTime; // Czas ostatniego puszczenia
+    uint8_t clickCount;          // Licznik kliknięć
+} btn1, btn2;
+
+void initButtons() {
+    pinMode(BTN_1, INPUT_PULLUP);
+    pinMode(BTN_2, INPUT_PULLUP);
+    
+    // Inicjalizacja stanu przycisków
+    btn1 = {HIGH, HIGH, 0, 0, 0};
+    btn2 = {HIGH, HIGH, 0, 0, 0};
+}
+
+void handleButtons() {
+    static unsigned long lastDebounceTime = 0;
+    const unsigned long debounceDelay = 50;
+
+    // Odczyt stanu przycisków
+    bool currentBtn1 = digitalRead(BTN_1);
+    bool currentBtn2 = digitalRead(BTN_2);
+
+    // Obsługa Przycisku 1
+    if (currentBtn1 != btn1.last) {
+        if ((millis() - lastDebounceTime) > debounceDelay) {
+            if (currentBtn1 == LOW) { // Wciśnięcie
+                btn1.pressTime = millis();
+                if (millis() - btn1.lastReleaseTime < DOUBLE_CLICK_TIME) {
+                    btn1.clickCount++;
+                } else {
+                    btn1.clickCount = 1;
+                }
+            } else { // Puszczenie
+                unsigned long pressDuration = millis() - btn1.pressTime;
+                btn1.lastReleaseTime = millis();
+
+                if (pressDuration < LONG_PRESS_TIME) {
+                    if (btn1.clickCount == 2) {
+                        // Podwójne kliknięcie
+                        debugPrint("Button 1: Double click - Screen+");
+                        screenNext();
+                    } else if (btn1.clickCount == 1) {
+                        // Pojedyncze krótkie
+                        debugPrint("Button 1: Short press - PAS+");
+                        increasePAS();
+                    }
+                } else {
+                    // Długie wciśnięcie
+                    if (isDisplayStarting()) {
+                        debugPrint("Button 1: Long press at startup - Settings mode");
+                        enterSettingsMode();
+                    } else {
+                        debugPrint("Button 1: Long press - Cruise control");
+                        toggleCruiseControl();
+                    }
+                }
+            }
+            lastDebounceTime = millis();
+        }
+    }
+
+    // Obsługa Przycisku 2
+    if (currentBtn2 != btn2.last) {
+        if ((millis() - lastDebounceTime) > debounceDelay) {
+            if (currentBtn2 == LOW) { // Wciśnięcie
+                btn2.pressTime = millis();
+                if (millis() - btn2.lastReleaseTime < DOUBLE_CLICK_TIME) {
+                    btn2.clickCount++;
+                } else {
+                    btn2.clickCount = 1;
+                }
+            } else { // Puszczenie
+                unsigned long pressDuration = millis() - btn2.pressTime;
+                btn2.lastReleaseTime = millis();
+
+                if (pressDuration < LONG_PRESS_TIME) {
+                    if (btn2.clickCount == 2) {
+                        // Podwójne kliknięcie
+                        debugPrint("Button 2: Double click - Screen-");
+                        screenPrevious();
+                    } else if (btn2.clickCount == 1) {
+                        // Pojedyncze krótkie
+                        debugPrint("Button 2: Short press - PAS-");
+                        decreasePAS();
+                    }
+                } else {
+                    // Długie wciśnięcie
+                    if (!isDisplayOn()) {
+                        debugPrint("Button 2: Long press when off - Power on");
+                        powerOn();
+                    } else {
+                        debugPrint("Button 2: Long press - Walk assist");
+                        toggleWalkAssist();
+                    }
+                }
+            }
+            lastDebounceTime = millis();
+        }
+    }
+
+    // Zapisz stany przycisków
+    btn1.last = currentBtn1;
+    btn2.last = currentBtn2;
+
+    // Reset liczników kliknięć po timeout
+    if (millis() - btn1.lastReleaseTime > DOUBLE_CLICK_TIME && btn1.clickCount > 0) {
+        btn1.clickCount = 0;
+    }
+    if (millis() - btn2.lastReleaseTime > DOUBLE_CLICK_TIME && btn2.clickCount > 0) {
+        btn2.clickCount = 0;
+    }
+}
+
+bool isDisplayStarting() {
+    // Sprawdź czy wyświetlacz jest w trakcie uruchamiania
+    return millis() < 3000; // Przykład: pierwsze 3 sekundy po starcie
+}
+
+bool isDisplayOn() {
+    // Sprawdź czy wyświetlacz jest włączony
+    return data.lastUpdate > 0;
+}
+
+void increasePAS() {
+    if (data.pasLevel < 8) {
+        data.pasLevel++;
+        // Wyślij komendę do kontrolera
+    }
+}
+
+void decreasePAS() {
+    if (data.pasLevel > 0) {
+        data.pasLevel--;
+        // Wyślij komendę do kontrolera
+    }
+}
+
+void toggleCruiseControl() {
+    data.cruise = !data.cruise;
+    // Wyślij komendę do kontrolera
+}
+
+void toggleWalkAssist() {
+    data.walk = !data.walk;
+    // Wyślij komendę do kontrolera
+}
+
+void screenNext() {
+    // Przełącz na następny ekran
+}
+
+void screenPrevious() {
+    // Przełącz na poprzedni ekran
+}
+
+void enterSettingsMode() {
+    // Wejdź w tryb ustawień
+}
+
+void powerOn() {
+    // Włącz wyświetlacz
+}
 
 // Funkcje debugowania
 #ifdef DEBUG
