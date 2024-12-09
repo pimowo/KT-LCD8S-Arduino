@@ -3,27 +3,6 @@
 #include <Adafruit_SSD1306.h>
 #include <Preferences.h>
 
-// Inicjalizacja obiektów
-Preferences preferences;
-//Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
-
-// Tryb debug
-#define DEBUG
-
-// Tryb debug
-#ifdef DEBUG
-  void debugPrint(const char* msg);
-  void debugFrame(uint8_t* frame, uint8_t length);
-  void debugData();
-#else
-  #define debugPrint(msg)
-  #define debugFrame(frame, length)
-  #define debugData()
-#endif
-
-// Deklaracja funkcji updateDisplay
-void updateDisplay();
-
 // Konfiguracja wyświetlacza
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
@@ -47,6 +26,24 @@ void updateDisplay();
 #define CMD_SPEED 0x02
 #define CMD_PAS 0x03
 #define CMD_CONFIG 0x51
+
+// Inicjalizacja obiektów
+Preferences preferences;
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+// Tryb debug
+#define DEBUG
+
+// Tryb debug
+#ifdef DEBUG
+  void debugPrint(const char* msg);
+  void debugFrame(uint8_t* frame, uint8_t length);
+  void debugData();
+#else
+  #define debugPrint(msg)
+  #define debugFrame(frame, length)
+  #define debugData()
+#endif
 
 // Struktura ramki danych
 struct ControllerFrame {
@@ -116,9 +113,6 @@ struct DisplayData {
     bool walk;
     unsigned long lastUpdate;  // Timestamp ostatniej aktualizacji
 } data;
-
-// Inicjalizacja wyświetlacza
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 // Funkcje debugowania
 #ifdef DEBUG
