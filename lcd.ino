@@ -82,6 +82,85 @@ struct DisplayData {
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
+// Struktura ramki danych
+struct ControllerFrame {
+    uint8_t start;      // Zawsze 0x11
+    uint8_t command;    // Typ komendy
+    uint8_t data[8];    // Dane (max 8 bajtów)
+    uint8_t checksum;   // XOR wszystkich bajtów
+};
+
+void processControllerData() {
+    static uint8_t buffer[12];  // Maksymalny rozmiar ramki (start + cmd + 8 data + checksum)
+    static uint8_t bufferIndex = 0;
+    
+    while (Serial2.available()) {
+        uint8_t byte = Serial2.read();
+        
+        // Szukamy początku nowej ramki
+        if (bufferIndex == 0 && byte == CMD_START) {
+            buffer[bufferIndex++] = byte;
+            continue;
+        }
+        
+        // Zapisujemy kolejne bajty
+        if (bufferIndex > 0) {
+            buffer[bufferIndex++] = byte;
+            
+            // Sprawdzamy czy mamy kompletną ramkę
+            if (bufferIndex > 2 && bufferIndex == buffer[2] + 4) {  // start + cmd + len + data + checksum
+                if (parseFrame(buffer, bufferIndex)) {
+                    // Ramka poprawna, aktualizujemy dane
+                    updateDataFromFrame(buffer);
+                }
+                bufferIndex = 0;  // Reset dla następnej ramki
+            }
+            
+            // Zabezpieczenie przed przepełnieniem bufora
+            if (bufferIndex >= sizeof(buffer)) {
+                bufferIndex = 0;
+            }
+        }
+    }
+}
+
+bool parseFrame(uint8_t* frame, uint8_t length) {
+    // Obliczamy sumę kontrolną
+    uint8_t checksum = 0;
+    for (uint8_t i = 0; i < length - 1; i++) {
+        checksum ^= frame[i];
+    }
+    
+    // Sprawdzamy czy suma kontrolna się zgadza
+    return checksum == frame[length - 1];
+}
+
+void updateDataFromFrame(uint8_t* frame) {
+    switch (frame[1]) {  // Sprawdzamy typ komendy
+        case CMD_STATUS:
+            // Aktualizacja statusu baterii, temperatury, błędów
+            data.batteryVoltage = frame[2] / 10.0;  // Napięcie w V
+            data.batteryPercent = frame[3];         // Procent naładowania
+            data.temperature = frame[4];            // Temperatura
+            data.error = frame[5];                  // Kod błędu
+            data.cruise = frame[6] & 0x01;          // Status tempomatu
+            data.walk = frame[6] & 0x02;           // Status wspomagania
+            break;
+            
+        case CMD_SPEED:
+            // Aktualizacja prędkości i mocy
+            data.speed = (frame[2] | (frame[3] << 8)) / 10.0;  // Prędkość w km/h
+            data.power = frame[4] | (frame[5] << 8);           // Moc w W
+            break;
+            
+        case CMD_PAS:
+            // Aktualizacja poziomu wspomagania i dystansu
+            data.pasLevel = frame[2];  // Poziom PAS
+            data.distance = (frame[3] | (frame[4] << 8) | (frame[5] << 16)) / 1000.0;  // Dystans w km
+            break;
+    }
+}
+
 void loadDefaultConfig() {
     // Główne parametry
     config.main.limitSpeed = 72;
