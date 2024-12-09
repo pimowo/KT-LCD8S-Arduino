@@ -1,7 +1,7 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
-#include <EEPROM.h>
+#include <Preferences.h>
 
 // Tryb debug
 #define DEBUG
@@ -12,9 +12,18 @@
 #define OLED_RESET -1
 #define SCREEN_ADDRESS 0x3C
 
-// Piny UART do kontrolera
-#define CONTROLLER_RX 16
-#define CONTROLLER_TX 17
+// Piny dla ESP32-S3-Zero
+#define CONTROLLER_RX 44  // Pin RX2
+#define CONTROLLER_TX 43  // Pin TX2
+#define I2C_SDA 8        // Pin SDA
+#define I2C_SCL 9        // Pin SCL
+
+// Podstawowe makra debugowania
+#ifdef DEBUG
+  #define debugPrint(msg) Serial.println(msg)
+#else
+  #define debugPrint(msg)
+#endif
 
 // Parametry protokołu
 #define FRAME_MAX_LENGTH 12
@@ -172,13 +181,22 @@ void loadDefaultConfig() {
 }
 
 void saveConfig() {
-    EEPROM.put(0, config);
-    debugPrint("Config saved to EEPROM");
+    preferences.begin("kt-lcd8s", false);
+    preferences.putBytes("config", &config, sizeof(config));
+    preferences.end();
+    debugPrint("Config saved to preferences");
 }
 
 void loadConfig() {
-    EEPROM.get(0, config);
-    debugPrint("Config loaded from EEPROM");
+    preferences.begin("kt-lcd8s", true);
+    if (preferences.getBytes("config", &config, sizeof(config)) > 0) {
+        debugPrint("Config loaded from preferences");
+    } else {
+        debugPrint("No config found in preferences");
+        loadDefaultConfig();
+        saveConfig();
+    }
+    preferences.end();
 }
 
 // Funkcje komunikacji z kontrolerem
@@ -330,6 +348,9 @@ void setup() {
     Serial.begin(115200);  // Port debug
     debugPrint("KT-LCD8S Arduino Controller starting...");
     #endif
+    
+    // Inicjalizacja I2C
+    Wire.begin(I2C_SDA, I2C_SCL);
     
     // Inicjalizacja UART do kontrolera
     Serial2.begin(1200, SERIAL_8N1, CONTROLLER_RX, CONTROLLER_TX);
