@@ -555,25 +555,6 @@ void updateDisplay() {
     display.display();
 }
 
-void updateDisplay() {
-    display.clearDisplay();
-    display.setTextColor(SSD1306_WHITE);
-
-    switch (currentScreen) {
-        case SCREEN_MAIN:
-            drawMainScreen();
-            break;
-        case SCREEN_DETAILS:
-            drawDetailsScreen();
-            break;
-        case SCREEN_SETTINGS:
-            drawSettingsScreen();
-            break;
-    }
-
-    display.display();
-}
-
 // Dodaj nowe funkcje dla poszczególnych ekranów
 void drawMainScreen() {
     // Duża prędkość na środku
