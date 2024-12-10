@@ -502,7 +502,8 @@ void processControllerData() {
             
             // Sprawdzamy czy mamy kompletną ramkę
             if (bufferIndex > 2 && bufferIndex == buffer[2] + 4) {
-                Serial.println(buffer, bufferIndex);
+                //Serial.println(buffer, bufferIndex);
+                Serial.println((char*)buffer);  // Rzutowanie buffer na wskaźnik char* jeśli jest to ciąg znaków
                 
                 if (parseFrame(buffer, bufferIndex)) {
                     updateDataFromFrame(buffer);
