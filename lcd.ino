@@ -535,34 +535,23 @@ void processControllerData() {
     }
 }
 
+// Zmodyfikuj istniejącą funkcję updateDisplay()
 void updateDisplay() {
     display.clearDisplay();
-    
-    // Wyświetl prędkość
-    display.setTextSize(2);
     display.setTextColor(SSD1306_WHITE);
-    display.setCursor(0,0);
-    display.print(data.speed, 1);
-    display.print(" km/h");
-    
-    // Wyświetl napięcie baterii
-    display.setTextSize(1);
-    display.setCursor(0, 20);
-    display.print(data.batteryVoltage, 1);
-    display.print("V ");
-    display.print(data.batteryPercent);
-    display.print("%");
-    
-    // Wyświetl poziom PAS
-    display.setCursor(0, 30);
-    display.print("PAS: ");
-    display.print(data.pasLevel);
-    
-    // Wyświetl moc
-    display.setCursor(0, 40);
-    display.print(data.power);
-    display.print("W");
-    
+
+    switch (currentScreen) {
+        case SCREEN_MAIN:
+            drawMainScreen();
+            break;
+        case SCREEN_DETAILS:
+            drawDetailsScreen();
+            break;
+        case SCREEN_SETTINGS:
+            drawSettingsScreen();
+            break;
+    }
+
     display.display();
 }
 
@@ -585,6 +574,7 @@ void updateDisplay() {
     display.display();
 }
 
+// Dodaj nowe funkcje dla poszczególnych ekranów
 void drawMainScreen() {
     // Duża prędkość na środku
     display.setTextSize(3);
@@ -667,16 +657,6 @@ void drawSettingsScreen() {
     display.setCursor(0, 48);
     display.print("Ctrl: C");
     display.print(config.c.c1);
-}
-
-void screenNext() {
-    currentScreen = (currentScreen + 1) % MAX_SCREENS;
-    updateDisplay();
-}
-
-void screenPrevious() {
-    currentScreen = (currentScreen + MAX_SCREENS - 1) % MAX_SCREENS;
-    updateDisplay();
 }
 
 void setup() {
