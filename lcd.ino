@@ -145,6 +145,7 @@ struct ButtonState {
     unsigned long pressTime;     // Czas wciśnięcia
     unsigned long lastReleaseTime; // Czas ostatniego puszczenia
     uint8_t clickCount;          // Licznik kliknięć
+    bool isLongPress;
 } btn1, btn2;
 
 void initButtons() {
@@ -157,100 +158,104 @@ void initButtons() {
 }
 
 void handleButtons() {
-    static unsigned long lastDebounceTime = 0;
-    const unsigned long debounceDelay = 50;
+    // Odczyt aktualnego stanu przycisków
+    btn1.current = digitalRead(BTN_1);
+    btn2.current = digitalRead(BTN_2);
+    unsigned long currentTime = millis();
 
-    // Odczyt stanu przycisków
-    bool currentBtn1 = digitalRead(BTN_1);
-    bool currentBtn2 = digitalRead(BTN_2);
+    // Debug - wyświetl stan przycisków
+    if (btn1.current != btn1.last || btn2.current != btn2.last) {
+        Serial.print("BTN1: ");
+        Serial.print(btn1.current);
+        Serial.print(" BTN2: ");
+        Serial.println(btn2.current);
+    }
 
     // Obsługa Przycisku 1
-    if (currentBtn1 != btn1.last) {
-        if ((millis() - lastDebounceTime) > debounceDelay) {
-            if (currentBtn1 == LOW) { // Wciśnięcie
-                btn1.pressTime = millis();
-                if (millis() - btn1.lastReleaseTime < DOUBLE_CLICK_TIME) {
-                    btn1.clickCount++;
-                } else {
-                    btn1.clickCount = 1;
-                }
-            } else { // Puszczenie
-                unsigned long pressDuration = millis() - btn1.pressTime;
-                btn1.lastReleaseTime = millis();
+    if (btn1.current != btn1.last) {
+        if (btn1.current == LOW) { // Wciśnięcie
+            btn1.pressTime = currentTime;
+            if (currentTime - btn1.lastReleaseTime < DOUBLE_CLICK_TIME) {
+                btn1.clickCount++;
+            } else {
+                btn1.clickCount = 1;
+            }
+        } else { // Puszczenie
+            unsigned long pressDuration = currentTime - btn1.pressTime;
+            btn1.lastReleaseTime = currentTime;
 
-                if (pressDuration < LONG_PRESS_TIME) {
-                    if (btn1.clickCount == 2) {
-                        // Podwójne kliknięcie
-                        debugPrint("Button 1: Double click - Screen+");
-                        screenNext();
-                    } else if (btn1.clickCount == 1) {
-                        // Pojedyncze krótkie
-                        debugPrint("Button 1: Short press - PAS+");
-                        increasePAS();
-                    }
+            if (pressDuration < LONG_PRESS_TIME) {
+                if (btn1.clickCount >= 2) {
+                    Serial.println("BTN1: Double click");
+                    screenNext();
                 } else {
-                    // Długie wciśnięcie
-                    if (isDisplayStarting()) {
-                        debugPrint("Button 1: Long press at startup - Settings mode");
-                        enterSettingsMode();
-                    } else {
-                        debugPrint("Button 1: Long press - Cruise control");
-                        toggleCruiseControl();
-                    }
+                    Serial.println("BTN1: Short press");
+                    increasePAS();
+                }
+            } else {
+                Serial.println("BTN1: Long press");
+                if (millis() < 3000) { // Podczas startu
+                    enterSettingsMode();
+                } else {
+                    toggleCruiseControl();
                 }
             }
-            lastDebounceTime = millis();
+            btn1.isLongPress = false;
+        }
+    } else if (btn1.current == LOW && !btn1.isLongPress) {
+        if (currentTime - btn1.pressTime >= LONG_PRESS_TIME) {
+            btn1.isLongPress = true;
+            Serial.println("BTN1: Long press detected");
         }
     }
 
     // Obsługa Przycisku 2
-    if (currentBtn2 != btn2.last) {
-        if ((millis() - lastDebounceTime) > debounceDelay) {
-            if (currentBtn2 == LOW) { // Wciśnięcie
-                btn2.pressTime = millis();
-                if (millis() - btn2.lastReleaseTime < DOUBLE_CLICK_TIME) {
-                    btn2.clickCount++;
-                } else {
-                    btn2.clickCount = 1;
-                }
-            } else { // Puszczenie
-                unsigned long pressDuration = millis() - btn2.pressTime;
-                btn2.lastReleaseTime = millis();
+    if (btn2.current != btn2.last) {
+        if (btn2.current == LOW) { // Wciśnięcie
+            btn2.pressTime = currentTime;
+            if (currentTime - btn2.lastReleaseTime < DOUBLE_CLICK_TIME) {
+                btn2.clickCount++;
+            } else {
+                btn2.clickCount = 1;
+            }
+        } else { // Puszczenie
+            unsigned long pressDuration = currentTime - btn2.pressTime;
+            btn2.lastReleaseTime = currentTime;
 
-                if (pressDuration < LONG_PRESS_TIME) {
-                    if (btn2.clickCount == 2) {
-                        // Podwójne kliknięcie
-                        debugPrint("Button 2: Double click - Screen-");
-                        screenPrevious();
-                    } else if (btn2.clickCount == 1) {
-                        // Pojedyncze krótkie
-                        debugPrint("Button 2: Short press - PAS-");
-                        decreasePAS();
-                    }
+            if (pressDuration < LONG_PRESS_TIME) {
+                if (btn2.clickCount >= 2) {
+                    Serial.println("BTN2: Double click");
+                    screenPrevious();
                 } else {
-                    // Długie wciśnięcie
-                    if (!isDisplayOn()) {
-                        debugPrint("Button 2: Long press when off - Power on");
-                        powerOn();
-                    } else {
-                        debugPrint("Button 2: Long press - Walk assist");
-                        toggleWalkAssist();
-                    }
+                    Serial.println("BTN2: Short press");
+                    decreasePAS();
+                }
+            } else {
+                Serial.println("BTN2: Long press");
+                if (!isDisplayOn()) {
+                    powerOn();
+                } else {
+                    toggleWalkAssist();
                 }
             }
-            lastDebounceTime = millis();
+            btn2.isLongPress = false;
+        }
+    } else if (btn2.current == LOW && !btn2.isLongPress) {
+        if (currentTime - btn2.pressTime >= LONG_PRESS_TIME) {
+            btn2.isLongPress = true;
+            Serial.println("BTN2: Long press detected");
         }
     }
 
     // Zapisz stany przycisków
-    btn1.last = currentBtn1;
-    btn2.last = currentBtn2;
+    btn1.last = btn1.current;
+    btn2.last = btn2.current;
 
     // Reset liczników kliknięć po timeout
-    if (millis() - btn1.lastReleaseTime > DOUBLE_CLICK_TIME && btn1.clickCount > 0) {
+    if (currentTime - btn1.lastReleaseTime > DOUBLE_CLICK_TIME && btn1.clickCount > 0) {
         btn1.clickCount = 0;
     }
-    if (millis() - btn2.lastReleaseTime > DOUBLE_CLICK_TIME && btn2.clickCount > 0) {
+    if (currentTime - btn2.lastReleaseTime > DOUBLE_CLICK_TIME && btn2.clickCount > 0) {
         btn2.clickCount = 0;
     }
 }
@@ -646,6 +651,14 @@ void setup() {
     debugPrint("KT-LCD8S Arduino Controller starting...");
     #endif
     
+    // Inicjalizacja przycisków
+    pinMode(BTN_1, INPUT_PULLUP);
+    pinMode(BTN_2, INPUT_PULLUP);
+    
+    // Inicjalizacja stanu przycisków
+    btn1 = {HIGH, HIGH, 0, 0, 0, false};
+    btn2 = {HIGH, HIGH, 0, 0, 0, false};
+
     // Inicjalizacja I2C
     Wire.begin(I2C_SDA, I2C_SCL);
     
@@ -697,4 +710,6 @@ void loop() {
         updateDisplay();
         lastDisplay = millis();
     }
+
+    handleButtons(); 
 }
