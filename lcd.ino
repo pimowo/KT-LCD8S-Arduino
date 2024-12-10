@@ -48,7 +48,7 @@ Preferences preferences;
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 // Tryb debug
-#define DEBUG
+#define DEBUG true
 
 // Tryb debug
 #ifdef DEBUG
@@ -654,6 +654,13 @@ void setup() {
     // Inicjalizacja przycisków
     pinMode(BTN_1, INPUT_PULLUP);
     pinMode(BTN_2, INPUT_PULLUP);
+    Serial.println("Buttons initialized");
+    
+    // Test przycisków
+    Serial.print("Initial BTN1 state: ");
+    Serial.println(digitalRead(BTN_1));
+    Serial.print("Initial BTN2 state: ");
+    Serial.println(digitalRead(BTN_2));
     
     // Inicjalizacja stanu przycisków
     btn1 = {HIGH, HIGH, 0, 0, 0, false};
@@ -688,6 +695,24 @@ void setup() {
 }
 
 void loop() {
+    static uint8_t lastBtn1State = HIGH;
+    static uint8_t lastBtn2State = HIGH;
+    
+    uint8_t btn1State = digitalRead(BTN_1);
+    uint8_t btn2State = digitalRead(BTN_2);
+    
+    if (btn1State != lastBtn1State) {
+        Serial.print("Button 1 changed to: ");
+        Serial.println(btn1State == HIGH ? "HIGH" : "LOW");
+        lastBtn1State = btn1State;
+    }
+    
+    if (btn2State != lastBtn2State) {
+        Serial.print("Button 2 changed to: ");
+        Serial.println(btn2State == HIGH ? "HIGH" : "LOW");
+        lastBtn2State = btn2State;
+    }
+
     static unsigned long lastDisplay = 0;
     static unsigned long lastDataCheck = 0;
     
@@ -699,7 +724,7 @@ void loop() {
     // Sprawdzanie czy dane są aktualne
     if (millis() - lastDataCheck > 1000) {  // Co sekundę
         if (millis() - data.lastUpdate > 2000) {
-            debugPrint("No data from controller!");
+            //debugPrint("No data from controller!");
             // Można tu dodać obsługę braku komunikacji
         }
         lastDataCheck = millis();
