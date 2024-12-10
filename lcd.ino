@@ -47,20 +47,6 @@ uint8_t currentScreen = SCREEN_MAIN;
 Preferences preferences;
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
-// Tryb debug
-#define DEBUG true
-
-// Tryb debug
-#ifdef DEBUG
-  void debugPrint(const char* msg);
-  void debugFrame(uint8_t* frame, uint8_t length);
-  void debugData();
-#else
-  #define debugPrint(msg)
-  #define debugFrame(frame, length)
-  #define debugData()
-#endif
-
 // Struktura ramki danych
 struct ControllerFrame {
     uint8_t start;      // Zawsze 0x11
@@ -374,22 +360,22 @@ void loadDefaultConfig() {
     config.l.l3 = 1;               // Zabezpieczenie hall
     config.l.l4 = 5;               // 5 min auto-off
     
-    debugPrint("Default config loaded");
+    Serial.println("Default config loaded");
 }
 
 void saveConfig() {
     preferences.begin("kt-lcd8s", false);
     preferences.putBytes("config", &config, sizeof(config));
     preferences.end();
-    debugPrint("Config saved to preferences");
+    Serial.println("Config saved to preferences");
 }
 
 void loadConfig() {
     preferences.begin("kt-lcd8s", true);
     if (preferences.getBytes("config", &config, sizeof(config)) > 0) {
-        debugPrint("Config loaded from preferences");
+        Serial.println("Config loaded from preferences");
     } else {
-        debugPrint("No config found in preferences");
+        Serial.println("No config found in preferences");
         loadDefaultConfig();
         saveConfig();
     }
@@ -446,12 +432,12 @@ void sendFullConfig() {
     // Parametry L
     sendConfigFrame(0x54, config.l.l1, config.l.l2, config.l.l3, config.l.l4);
     
-    debugPrint("Config sent successfully");
+    Serial.println("Config sent successfully");
 }
 
 bool parseFrame(uint8_t* frame, uint8_t length) {
     if (length < FRAME_MIN_LENGTH || length > FRAME_MAX_LENGTH) {
-        debugPrint("Invalid frame length");
+        Serial.println("Invalid frame length");
         return false;
     }
     
@@ -463,7 +449,7 @@ bool parseFrame(uint8_t* frame, uint8_t length) {
     
     // Sprawdzamy czy suma kontrolna się zgadza
     if (checksum != frame[length - 1]) {
-        debugPrint("Checksum error");
+        Serial.println("Checksum error");
         return false;
     }
     
@@ -503,7 +489,7 @@ void processControllerData() {
     
     // Reset bufora jeśli minął timeout
     if (bufferIndex > 0 && millis() - lastByteTime > FRAME_TIMEOUT) {
-        debugPrint("Frame timeout - resetting buffer");
+        Serial.println("Frame timeout - resetting buffer");
         bufferIndex = 0;
     }
     
@@ -523,7 +509,7 @@ void processControllerData() {
             
             // Sprawdzamy czy mamy kompletną ramkę
             if (bufferIndex > 2 && bufferIndex == buffer[2] + 4) {
-                debugFrame(buffer, bufferIndex);
+                Serial.println(buffer, bufferIndex);
                 
                 if (parseFrame(buffer, bufferIndex)) {
                     updateDataFromFrame(buffer);
@@ -533,7 +519,7 @@ void processControllerData() {
             
             // Zabezpieczenie przed przepełnieniem bufora
             if (bufferIndex >= FRAME_MAX_LENGTH) {
-                debugPrint("Buffer overflow - resetting");
+                Serial.println("Buffer overflow - resetting");
                 bufferIndex = 0;
             }
         }
@@ -646,10 +632,8 @@ void drawSettingsScreen() {
 }
 
 void setup() {
-    #ifdef DEBUG
     Serial.begin(115200);  // Port debug
-    debugPrint("KT-LCD8S Arduino Controller starting...");
-    #endif
+    Serial.println("KT-LCD8S Arduino Controller starting...");
     
     // Inicjalizacja przycisków
     pinMode(BTN_1, INPUT_PULLUP);
