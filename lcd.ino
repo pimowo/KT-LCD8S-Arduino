@@ -296,12 +296,6 @@ void powerOn() {
     // Włącz wyświetlacz
 }
 
-// Funkcje debugowania
-#ifdef DEBUG
-void debugPrint(const char* msg) {
-    Serial.println(msg);
-}
-
 void debugFrame(uint8_t* frame, uint8_t length) {
     Serial.print("Frame: ");
     for (uint8_t i = 0; i < length; i++) {
@@ -321,7 +315,6 @@ void debugData() {
     Serial.print("W Temp: "); Serial.print(data.temperature);
     Serial.println("°C");
 }
-#endif
 
 // Funkcje konfiguracji
 void loadDefaultConfig() {
@@ -412,7 +405,7 @@ void sendConfigFrame(uint8_t cmd, ...) {
 }
 
 void sendFullConfig() {
-    debugPrint("Sending full config to controller...");
+    Serial.println("Sending full config to controller...");
     
     // Główne parametry
     sendConfigFrame(0x51, config.main.limitSpeed, config.main.wheelSize, config.main.units);
@@ -655,15 +648,15 @@ void setup() {
     
     // Inicjalizacja UART do kontrolera
     Serial2.begin(1200, SERIAL_8N1, CONTROLLER_RX, CONTROLLER_TX);
-    debugPrint("Controller UART initialized");
+    Serial.println("Controller UART initialized");
     
     // Inicjalizacja OLED
     if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
-        debugPrint("SSD1306 allocation failed");
+        Serial.println("SSD1306 allocation failed");
         for(;;);  // Nie kontynuuj jeśli wyświetlacz nie działa
     }
     display.clearDisplay();
-    debugPrint("Display initialized");
+    Serial.println("Display initialized");
     
     // Wczytaj konfigurację
     loadConfig();
@@ -675,7 +668,7 @@ void setup() {
     memset(&data, 0, sizeof(data));
     data.lastUpdate = millis();
     
-    debugPrint("Setup completed");
+    Serial.println("Setup completed");
 }
 
 void loop() {
@@ -708,7 +701,7 @@ void loop() {
     // Sprawdzanie czy dane są aktualne
     if (millis() - lastDataCheck > 1000) {  // Co sekundę
         if (millis() - data.lastUpdate > 2000) {
-            //debugPrint("No data from controller!");
+            //Serial.println("No data from controller!");
             // Można tu dodać obsługę braku komunikacji
         }
         lastDataCheck = millis();
